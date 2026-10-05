@@ -12,7 +12,8 @@
     python3 cli.py leagues 2026 [--prefix Bgld]
 
     python3 cli.py check report.json [--complete filled.json]
-    python3 cli.py enter report.json     # check, then save the clean matches
+    python3 cli.py enter report.json     # check, then save the clean matches after a typed yes
+    python3 cli.py enter report.json --yes   # no prompt: only once the user has approved
 
 Queries print JSON. Run `login` yourself: it is the one command that handles the
 password, and it never shows it.
@@ -69,6 +70,9 @@ def main():
         p = sub.add_parser(name, help='check a match report' + (', then save it' if name == 'enter' else ''))
         p.add_argument('report')
         p.add_argument('--complete', help='write the report with every ident filled in')
+        if name == 'enter':
+            p.add_argument('--yes', action='store_true',
+                           help='save without asking (only once the user has approved the checked results)')
     args = ap.parse_args()
 
     if args.cmd == 'login':
@@ -118,7 +122,25 @@ def main():
             require_club(cfg)
             print(f'Logged on as {client.login(s)}.')
             report = json.loads(Path(args.report).read_text(encoding='utf-8'))
-            problems, completed = match.process(s, cfg, report, save=args.cmd == 'enter')
+            # Always check first, saving nothing.
+            problems, completed = match.process(s, cfg, report, save=False)
+            if args.cmd == 'enter':
+                if problems:
+                    print(f'\n{problems} problem(s): nothing saved.')
+                    return 1
+                # Saved results are public to the whole league, so saving needs an explicit
+                # yes: typed at a terminal, or --yes for a caller that has already asked
+                # the user (the command-line counterpart of confirm=true in the MCP tool).
+                if not args.yes:
+                    if not sys.stdin.isatty():
+                        print('\nChecked and clean; not saved. Saving is public: re-run with --yes '
+                              'once the user has approved the checked results.')
+                        return 1
+                    if input('\nSave these results on Chess-Results, visible to the whole league? '
+                             'Type yes: ').strip().lower() != 'yes':
+                        print('Not saved.')
+                        return 1
+                problems, completed = match.process(s, cfg, completed, save=True)
             if args.complete:
                 Path(args.complete).write_text(json.dumps(completed, ensure_ascii=False, indent=1) + '\n',
                                                encoding='utf-8')

@@ -448,6 +448,45 @@ def text_of(el):
     return ' '.join(el.get_text(' ', strip=True).split())
 
 
+DATE = re.compile(r'(\d{4})/(\d{2})/(\d{2})')
+
+
+def iso_date(text):
+    """'2026/09/20' as Chess-Results prints it -> '2026-09-20'; anything else unchanged."""
+    m = DATE.fullmatch((text or '').strip())
+    return f'{m.group(1)}-{m.group(2)}-{m.group(3)}' if m else text
+
+
+def number(text):
+    """'10' -> 10; '-', '' and anything not a whole number -> None."""
+    text = (text or '').strip()
+    return int(text) if text.isdigit() else None
+
+
+AGO = re.compile(r'(\d+)\s*(Year|Month|Week|Day|Hour|Min|Sec)', re.I)
+AGO_UNITS = dict(year=365 * 86400, month=30 * 86400, week=7 * 86400, day=86400, hour=3600, min=60, sec=1)
+
+
+def ago_to_timestamp(text, now=None):
+    """'19 Hours 24 Min.' (Chess-Results' "last update") -> the ISO time it stands for,
+    counted back from `now`, to the minute. None if the text is not a duration."""
+    parts = AGO.findall(text or '')
+    if not parts:
+        return None
+    seconds = sum(int(n) * AGO_UNITS[unit.lower()] for n, unit in parts)
+    now = now or datetime.now(ZoneInfo('UTC'))
+    return (now - timedelta(seconds=seconds)).replace(second=0, microsecond=0).isoformat().replace('+00:00', 'Z')
+
+
+def when(text):
+    """'Round 2 on 2026/10/04 at 09:00' -> '2026-10-04T09:00' (or just the date)."""
+    m = re.search(r'(\d{4})/(\d{2})/(\d{2})(?:\s+at\s+(\d{1,2}:\d{2}))?', text or '')
+    if not m:
+        return None
+    day = f'{m.group(1)}-{m.group(2)}-{m.group(3)}'
+    return f'{day}T{int(m.group(4).split(":")[0]):02d}:{m.group(4).split(":")[1]}' if m.group(4) else day
+
+
 def cached_get(s, url, ttl):
     """A public page, from the local cache when younger than `ttl` seconds."""
     CACHE.mkdir(parents=True, exist_ok=True)
@@ -475,35 +514,67 @@ def form_of(html):
     return data
 
 
-def tables(html):
-    """Every result table on a page (class CRs1/CRs2) as {header, rows, links}.
+BOARD_HEADER = ['Bo.', 'Title', 'Name', 'Rtg', '-', 'Title 2', 'Name 2', 'Rtg 2', 'Res.']
+SCORE = re.compile(r'\d(?:[,.]5|½)?\s*:\s*\d|½\s*:')
 
-    A row spanning the table ("1. Musterdorf 2 (RtgAvg …)") is kept as
-    {'section': text}, so team blocks and round headings stay in place."""
+
+def unique_names(names):
+    """Column names made unique: a schedule has "Team, Team, Res., :, Res." — the second
+    of each becomes "Team 2", "Res. 2", so no column overwrites another."""
+    seen, out = {}, []
+    for name in names:
+        seen[name] = seen.get(name, 0) + 1
+        out.append(name if seen[name] == 1 or not name else f'{name} {seen[name]}')
+    return out
+
+
+def tables(html):
+    """Every result table on a page (class CRs1/CRs2) as {header, rows}.
+
+    A row spanning the table ("Round 2 on 2026/10/04 at 09:00", "1. Musterdorf 2
+    (RtgAvg …)") is kept as {'section': text}, with `date` when it names one. The
+    header is the first row marked <th>/CRg1b, or the first row at all after any
+    section headings (the player search marks nothing). A two-cell row is a key/value
+    pair (the player card), never a header. Columns without a name (flags) are
+    dropped, dates become ISO, and a row's tournament link is kept as "_link"."""
     soup = BeautifulSoup(html, 'html.parser')
     out = []
     for t in soup.select('table.CRs1, table.CRs2'):
-        header, rows = None, []
+        header, raw_header, rows = None, None, []
         for tr in t.find_all('tr', recursive=False) or t.find_all('tr'):
             cells = tr.find_all(['td', 'th'], recursive=False)
             if len(cells) == 1 and cells[0].get('colspan'):
-                rows.append({'section': text_of(cells[0])})
+                section = {'section': text_of(cells[0])}
+                if when(section['section']):
+                    section['date'] = when(section['section'])
+                rows.append(section)
                 continue
-            values = [text_of(c) for c in cells]
-            # The first row is the header: marked with <th> or class CRg1b, or simply
-            # first (the player search). A two-cell row is a key/value pair (the
-            # player card), never a header.
-            if header is None and not rows and (tr.find('th') or 'CRg1b' in (tr.get('class') or [])
-                                                 or len(values) > 2):
-                header = values
+            values = [iso_date(text_of(c)) for c in cells]
+            # A team round page (art=3) heads each match with its own row: "Bo. | 6 |
+            # Westdorf 1 | Rtg | - | 4 | Ostdorf 1 | Rtg | 1 : 5". That is a heading, not
+            # the column header; the boards under it get neutral column names.
+            if len(values) == len(BOARD_HEADER) and values[0] == 'Bo.' and SCORE.search(values[-1]):
+                rows.append({'section': f'{values[2]} – {values[6]} {values[-1]}',
+                             'home': values[2], 'away': values[6], 'score': values[-1]})
+                header, raw_header = BOARD_HEADER, None
                 continue
+            only_sections = all('section' in r for r in rows)
+            if header is None and only_sections and (tr.find('th') or 'CRg1b' in (tr.get('class') or [])
+                                                     or len(values) > 2):
+                raw_header, header = values, unique_names(values)
+                continue
+            if header and values == raw_header:
+                continue        # the header again, under the next round's heading
             link = next((a['href'] for a in tr.find_all('a', href=True) if 'tnr' in a['href']), None)
-            row = dict(zip(header, values)) if header and len(header) == len(values) else {'cells': values}
+            if header and len(header) == len(values):
+                row = {k: v for k, v in zip(header, values) if k}
+            else:
+                row = {'cells': values}
             if link:
                 row['_link'] = link
             rows.append(row)
         if rows:
-            out.append(dict(header=header, rows=rows))
+            out.append(dict(header=[h for h in header if h] if header else None, rows=rows))
     return out
 
 
@@ -555,8 +626,9 @@ def search_players(s, limit=50, **query):
         if row.get('Club/City') and row['Club/City'] not in g['clubs']:
             g['clubs'].append(row['Club/City'])
         m = re.search(r'tnr(\d+)\.aspx.*snr=(\d+)', row.get('_link', ''))
-        g['appearances'].append(dict(tournament=row.get('Tournament'), end=row.get('End-Date'),
-                                     rank=row.get('Rk.'), rounds=row.get('Rd.'), players=row.get('n'),
+        g['appearances'].append(dict(tournament=row.get('Tournament'), end=iso_date(row.get('End-Date')),
+                                     rank=number(row.get('Rk.')), rounds=number(row.get('Rd.')),
+                                     players=number(row.get('n')),
                                      tnr=m and m.group(1), snr=m and m.group(2)))
     players = sorted(groups.values(), key=lambda g: -len(g['appearances']))[:limit]
     full_tournament_names(s, [a for g in players for a in g['appearances']])
@@ -604,7 +676,21 @@ def player_card(s, tnr, snr):
             cells = tr.find_all('td', recursive=False)
             if len(cells) == 2:
                 fields[text_of(cells[0])] = text_of(cells[1])
-    return dict(tournament=title_of(html), fields=fields, games=games,
+    def rating(key):
+        value = number(fields.get(key))
+        return value or None
+    player = dict(name=fields.get('Name'), ident=fields.get('Ident-Number') or None,
+                  fideId=(fields.get('Fide-ID') or fields.get('FIDE-ID') or '').strip('0') and
+                  (fields.get('Fide-ID') or fields.get('FIDE-ID')) or None,
+                  federation=fields.get('Federation'), title=fields.get('Title') or None,
+                  club=fields.get('Club/City') or None, birthYear=number(fields.get('Year of birth')),
+                  rating=rating('Rating'), ratingNational=rating('Rating national'),
+                  ratingInternational=rating('Rating international'),
+                  performance=rating('Performance rating'), startingRank=number(fields.get('Starting rank')),
+                  rank=number(fields.get('Rank')),
+                  points=float(fields['Points'].replace(',', '.').replace('½', '.5'))
+                  if re.fullmatch(r'\d+(?:[.,]5|½)?|½', fields.get('Points') or '') else None)
+    return dict(tournament=title_of(html), player=player, fields=fields, games=games,
                 source=f'{SEARCH_BASE}tnr{tnr}.aspx?lan=1&art=9&snr={snr}')
 
 
@@ -628,16 +714,19 @@ def search_tournaments(s, country=None, limit=50, **query):
         data['ctl00$P1$combo_land'] = country.upper()
     data['ctl00$P1$cb_suchen'] = 'Search'
     html = s.post(url, data=data, timeout=30).text
+    fetched = datetime.now(ZoneInfo('UTC'))
     found = next((t for t in tables(html) if t['header'] and 'Tournament' in t['header']), None)
     out = []
     for row in (found or {}).get('rows', []):
         if 'Tournament' not in row:
             continue
         out.append(dict(tnr=row.get('dbkey') or (re.search(r'tnr(\d+)', row.get('_link', '')) or [None, None])[1],
-                        name=row.get('Tournament'), country=row.get('FED'), start=row.get('from'),
-                        end=row.get('to'), location=row.get('Location'), organizer=row.get('Organizer(s)'),
-                        director=row.get('Tournament director'), rounds=row.get('Rd.'), players=row.get('n'),
-                        updated=row.get('Last update')))
+                        name=row.get('Tournament'), country=row.get('FED'), start=iso_date(row.get('from')),
+                        end=iso_date(row.get('to')), location=row.get('Location') or None,
+                        organizer=row.get('Organizer(s)') or None, director=row.get('Tournament director') or None,
+                        rounds=number(row.get('Rd.')), players=number(row.get('n')),
+                        # The site prints how long ago, e.g. "19 Hours 24 Min."; this is the time.
+                        updatedAt=ago_to_timestamp(row.get('Last update'), fetched)))
     return dict(query=dict(query, country=country), tournaments=out[:limit], count=len(out))
 
 
@@ -668,7 +757,15 @@ def tournament(s, tnr, art=None, rd=None, snr=None, details=False, ttl=900):
         cells = tr.find_all('td', recursive=False)
         if len(cells) == 2 and 2 < len(text_of(cells[0])) < 40 and not text_of(cells[0])[0].isdigit():
             info.setdefault(text_of(cells[0]), text_of(cells[1]))
+    # The details block also lists the page's menus; those are `views`, not facts.
+    for menu in ('Links', 'Lists', 'Board Pairings', 'Excel and Print', 'Show tournament details'):
+        info.pop(menu, None)
+    if info.get('Parameters') == 'No tournament details':
+        info.pop('Parameters')
+    dates = DATE.findall(info.get('Date', ''))
     return dict(tnr=str(tnr), title=title_of(html), url=url, info=info if details else None,
+                start=f'{dates[0][0]}-{dates[0][1]}-{dates[0][2]}' if dates else None,
+                end=f'{dates[-1][0]}-{dates[-1][1]}-{dates[-1][2]}' if dates else None,
                 tables=tables(html), views=views)
 
 

@@ -69,9 +69,11 @@ team roster, then the club. Results, no-shows, total and board order are checked
 then Chess-Results' own "Eingabe Prüfen" runs. **Nothing is saved.** Show the user
 the log and every STOP, NOTICE and warn.
 
-### 3. Enter — `enter_match_report(completed, confirm=true)` / `cli.py enter` — only after a clear yes
+### 3. Enter — `enter_match_report(completed, confirm=true)` / `cli.py enter report.json --yes` — only after a clear yes
 
-Pass the `completed` report from the check. Saved results are visible to the whole
+Pass the `completed` report from the check (`--complete filled.json` on the command
+line). Without `--yes`, `cli.py enter` asks the user to type yes, and refuses when
+there is no terminal. Saved results are visible to the whole
 league (changeable later; Chess-Results logs who saved them). Unclean matches and
 matches outside the entry window are not saved; the overview is re-read to confirm.
 The entry page only offers the round currently open.

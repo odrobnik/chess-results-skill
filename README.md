@@ -103,6 +103,19 @@ python3 -m unittest discover -s tests
 
 The tests run offline. Every club, player and number in them is made up.
 
+## Changes
+
+**0.2.0** — Query results are consistent data: ISO dates everywhere, the last update
+of a tournament as a timestamp (`updatedAt`, was "19 Hours 24 Min."), numbers as
+integers, full tournament names in player searches (the site cuts them to 30
+characters), a typed `player` block on player cards, `start`/`end` on tournament
+pages, unique column names (a schedule's two "Team" columns no longer collapse into
+one), match headings on round pages, and no menu entries among tournament details.
+`cli.py enter` saves only after a typed yes (or `--yes`). SECURITY.md describes what
+the skill accesses.
+
+**0.1.0** — First release.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). Not affiliated with Chess-Results or its operators;

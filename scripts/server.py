@@ -50,10 +50,10 @@ class Status(BaseModel):
 
 class Appearance(BaseModel):
     tournament: str | None = None
-    end: str | None = Field(None, description='Tournament end date as Chess-Results prints it (YYYY/MM/DD)')
-    rank: str | None = None
-    rounds: str | None = None
-    players: str | None = Field(None, description='Number of participants')
+    end: str | None = Field(None, description='Tournament end date, YYYY-MM-DD')
+    rank: int | None = Field(None, description='Final rank; none in team competitions')
+    rounds: int | None = None
+    players: int | None = Field(None, description='Number of participants')
     nameShortened: bool | None = Field(None, description='The name is cut short as the search printed it '
                                                          '(too many tournaments to look up); see tournament(tnr)')
     tnr: str | None = Field(None, description='Tournament number, for player_card and tournament')
@@ -77,9 +77,27 @@ class PlayerSearch(BaseModel):
     truncated: bool = Field(description='More results exist than returned; narrow the search')
 
 
+class CardPlayer(BaseModel):
+    name: str | None = None
+    ident: str | None = Field(None, description='National register number')
+    fideId: str | None = None
+    federation: str | None = None
+    title: str | None = None
+    club: str | None = None
+    birthYear: int | None = None
+    rating: int | None = Field(None, description='The rating the tournament used')
+    ratingNational: int | None = None
+    ratingInternational: int | None = None
+    performance: int | None = None
+    startingRank: int | None = None
+    rank: int | None = None
+    points: float | None = None
+
+
 class PlayerCard(BaseModel):
     tournament: str | None = None
-    fields: dict[str, str] = Field(description='The card: Name, Ident-Number, Fide-ID, Year of birth, ratings, …')
+    player: CardPlayer = Field(description='The card\'s facts, typed; 0 ratings are null')
+    fields: dict[str, str] = Field(description='The card as printed: Name, Ident-Number, Fide-ID, …')
     games: list[dict[str, Any]] = Field(description="The player's rounds in that tournament")
     source: str
 
@@ -88,14 +106,15 @@ class TournamentHit(BaseModel):
     tnr: str | None = None
     name: str | None = None
     country: str | None = None
-    start: str | None = None
-    end: str | None = None
+    start: str | None = Field(None, description='YYYY-MM-DD')
+    end: str | None = Field(None, description='YYYY-MM-DD')
     location: str | None = None
     organizer: str | None = None
     director: str | None = None
-    rounds: str | None = None
-    players: str | None = None
-    updated: str | None = Field(None, description='Time since the last upload, as Chess-Results prints it')
+    rounds: int | None = None
+    players: int | None = None
+    updatedAt: str | None = Field(None, description='Last upload, ISO 8601 UTC to the minute (the site '
+                                                    'prints it as time ago)')
 
 
 class TournamentSearch(BaseModel):
@@ -106,9 +125,10 @@ class TournamentSearch(BaseModel):
 
 class Table(BaseModel):
     header: list[str] | None = Field(None, description='Column names; rows are keyed by them')
-    rows: list[dict[str, Any]] = Field(description='One dict per row; {"section": …} marks a heading row '
-                                                    '(a team, a round); {"cells": […]} a row without header; '
-                                                    '"_link" the row\'s tournament link')
+    rows: list[dict[str, Any]] = Field(description='One dict per row, keyed by the header; {"section": …} marks '
+                                                    'a heading row (a team, a round), with "date" (ISO) when it '
+                                                    'names one; {"cells": […]} a row that does not fit the header; '
+                                                    '"_link" the row\'s tournament link. Dates are ISO.')
 
 
 class TournamentPage(BaseModel):
@@ -116,6 +136,8 @@ class TournamentPage(BaseModel):
     title: str | None = None
     url: str
     info: dict[str, str] | None = Field(None, description='Details block (with details=true): organiser, venue, …')
+    start: str | None = Field(None, description='First day, YYYY-MM-DD (with details=true)')
+    end: str | None = Field(None, description='Last day, YYYY-MM-DD (with details=true)')
     tables: list[Table]
     views: dict[str, dict[str, str]] = Field(description='Other pages of this tournament: label -> {art, rd, snr}')
 

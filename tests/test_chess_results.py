@@ -13,8 +13,8 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import credentials
-from client import (check_window, deadline, messages, parse_compositions, parse_members,
-                    resolved, saved_pairings, tables)
+from client import (ago_to_timestamp, check_window, deadline, iso_date, messages, number,
+                    parse_compositions, parse_members, resolved, saved_pairings, tables, when)
 from match import judge
 from report import (best_fit, board_order_warnings, club_words, flipped, forfeit_problem,
                     name_fit, score, team_number)
@@ -236,6 +236,57 @@ class PageTests(unittest.TestCase):
         self.assertEqual(search['rows'][0]['ID'], '900103')
         self.assertIsNone(card['header'])
         self.assertEqual(card['rows'][1]['cells'], ['Ident-Number', '900103'])
+
+
+class NormalisationTests(unittest.TestCase):
+    """Chess-Results prints dates with slashes, the last update as time ago, and numbers
+    as text; the tools return ISO dates, timestamps and integers."""
+
+    def test_dates_numbers_and_round_times(self):
+        self.assertEqual(iso_date('2026/09/20'), '2026-09-20')
+        self.assertEqual(iso_date('Kittsee'), 'Kittsee')
+        self.assertEqual((number('10'), number('-'), number('')), (10, None, None))
+        self.assertEqual(when('Round 2 on 2026/10/04 at 09:00'), '2026-10-04T09:00')
+        self.assertEqual(when('Round 1 on 2026/09/20'), '2026-09-20')
+
+    def test_time_ago_becomes_a_timestamp(self):
+        now = datetime(2026, 10, 5, 16, 30, 45, tzinfo=ZoneInfo('UTC'))
+        self.assertEqual(ago_to_timestamp('19 Hours 24 Min.', now), '2026-10-04T21:06:00Z')
+        self.assertEqual(ago_to_timestamp('2 Days 3 Hours', now), '2026-10-03T13:30:00Z')
+        self.assertEqual(ago_to_timestamp('6 Days', now), '2026-09-29T16:30:00Z')
+        self.assertIsNone(ago_to_timestamp('yesterday', now))
+
+    def test_a_schedule_keeps_both_teams_and_skips_repeated_headers(self):
+        html = """<table class="CRs1">
+          <tr><td colspan="6">Round 1 on 2026/09/20 at 09:00</td></tr>
+          <tr><td>No.</td><td>Team</td><td>Team</td><td>Res.</td><td>:</td><td>Res.</td></tr>
+          <tr><td>1</td><td>Westdorf 1</td><td>Ostdorf 1</td><td>4½</td><td>:</td><td>1½</td></tr>
+          <tr><td colspan="6">Round 2 on 2026/10/04 at 09:00</td></tr>
+          <tr><td>No.</td><td>Team</td><td>Team</td><td>Res.</td><td>:</td><td>Res.</td></tr>
+          <tr><td>1</td><td>Ostdorf 1</td><td>Nordheim 1</td><td>3</td><td>:</td><td>3</td></tr></table>"""
+        t = tables(html)[0]
+        self.assertEqual(t['header'], ['No.', 'Team', 'Team 2', 'Res.', ':', 'Res. 2'])
+        rows = t['rows']
+        self.assertEqual(rows[0], {'section': 'Round 1 on 2026/09/20 at 09:00', 'date': '2026-09-20T09:00'})
+        self.assertEqual((rows[1]['Team'], rows[1]['Team 2'], rows[1]['Res.'], rows[1]['Res. 2']),
+                         ('Westdorf 1', 'Ostdorf 1', '4½', '1½'))
+        self.assertEqual([r.get('section', r.get('Team')) for r in rows],
+                         ['Round 1 on 2026/09/20 at 09:00', 'Westdorf 1', 'Round 2 on 2026/10/04 at 09:00', 'Ostdorf 1'])
+
+
+    def test_a_round_page_heads_each_match_and_names_the_board_columns(self):
+        html = """<table class="CRs1">
+          <tr><td colspan="9">Round 2 on 2026/10/04 at 09:00</td></tr>
+          <tr><td>Bo.</td><td>6</td><td>Westdorf 1</td><td>Rtg</td><td>-</td><td>4</td><td>Ostdorf 1</td><td>Rtg</td><td>1 : 5</td></tr>
+          <tr><td>1.1</td><td>FM</td><td>Roth, Paul</td><td>2066</td><td>-</td><td></td><td>Weiss, Ute</td><td>2369</td><td>½ - ½</td></tr>
+          <tr><td>Bo.</td><td>5</td><td>Nordheim 1</td><td>Rtg</td><td>-</td><td>3</td><td>Südheim 1</td><td>Rtg</td><td>3 : 3</td></tr>
+          <tr><td>2.1</td><td></td><td>Lang, Eva</td><td>1900</td><td>-</td><td></td><td>Fuchs, Max</td><td>1850</td><td>1 - 0</td></tr></table>"""
+        rows = tables(html)[0]['rows']
+        self.assertEqual(rows[1], {'section': 'Westdorf 1 – Ostdorf 1 1 : 5', 'home': 'Westdorf 1',
+                                   'away': 'Ostdorf 1', 'score': '1 : 5'})
+        self.assertEqual((rows[2]['Name'], rows[2]['Name 2'], rows[2]['Res.']), ('Roth, Paul', 'Weiss, Ute', '½ - ½'))
+        self.assertEqual(rows[3]['home'], 'Nordheim 1')
+        self.assertEqual(rows[4]['Name'], 'Lang, Eva')
 
 
 class CredentialTests(unittest.TestCase):
