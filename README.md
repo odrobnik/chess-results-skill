@@ -35,7 +35,7 @@ pip install -r requirements.txt
 **OpenClaw** — as a plugin (MCP tools plus the skill), or as a skill only:
 
 ```bash
-openclaw plugins install git:github.com/odrobnik/chess-results-skill@v0.1.0
+openclaw plugins install git:github.com/odrobnik/chess-results-skill@v0.2.1
 openclaw skills install @odrobnik/chess-results
 ```
 

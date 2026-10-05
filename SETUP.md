@@ -91,7 +91,7 @@ Two ways in:
   `chess-results__search_players` and so on.
 
   ```bash
-  openclaw plugins install git:github.com/odrobnik/chess-results-skill@v0.1.0
+  openclaw plugins install git:github.com/odrobnik/chess-results-skill@v0.2.1
   openclaw plugins install ./chess-results      # or from a local folder
   ```
 
