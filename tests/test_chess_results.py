@@ -375,5 +375,23 @@ class PackagingTests(unittest.TestCase):
         self.assertNotIn('mcpServers', manifest)
 
 
+class ServerTests(unittest.TestCase):
+    """What a host learns from the server alone: ChatGPT and other MCP clients get no
+    SKILL.md, so the workflow travels in the instructions and the tool annotations."""
+
+    def test_only_enter_match_report_changes_anything(self):
+        import asyncio
+        import server
+        tools = {t.name: t.annotations for t in asyncio.run(server.mcp.list_tools())}
+        self.assertEqual([name for name, a in tools.items() if not a.readOnlyHint], ['enter_match_report'])
+        self.assertTrue(tools['enter_match_report'].destructiveHint)
+
+    def test_the_instructions_carry_the_match_report_workflow(self):
+        import server
+        for step in ('exactly as written', 'check_match_report', 'enter_match_report(completed, confirm=true)',
+                     'Never ask for the password'):
+            self.assertIn(step, server.mcp.instructions)
+
+
 if __name__ == '__main__':
     unittest.main()

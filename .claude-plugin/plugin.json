@@ -1,6 +1,6 @@
 {
   "name": "chess-results",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Chess-Results for agents: search players and tournaments, read any tournament page, and check and enter team-championship results from the paper match report. The login stays in the system credential store.",
   "author": {
     "name": "Oliver Drobnik",

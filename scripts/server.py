@@ -3,7 +3,9 @@
 Started by the host (Claude Code, Codex, …) over stdio. The Chess-Results login is
 read from the system credential store (credentials.py), never from the host, so one
 stored login serves every host. Club settings come from chess-results.json in the
-project folder (report.py, find_config).
+project folder (report.py, find_config). A host that loads the server without
+SKILL.md (ChatGPT, …) learns the workflow from the server's instructions and which
+tool changes anything from the tool annotations.
 
     python3 server.py            # normally the host starts it
 """
@@ -19,14 +21,47 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
+from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 import client
 import credentials
 from report import load_config, require_club
 
-mcp = FastMCP('chess-results')
+# SKILL.md in short, for hosts that only see the server.
+INSTRUCTIONS = """\
+Chess-Results (chess-results.com) has no API: these tools read its public pages and
+replay its own forms. Quote what they return; don't fill gaps from memory. The site
+throttles bursts: ask for what the question needs, not whole seasons in a loop.
+
+search_players returns tournament appearances, not a register. A player grouped by
+name only (no FIDE id or ident) may be several people, and one person may appear under
+several spellings; say so.
+
+Photographed team match reports (Spielberichte) -> entered results:
+1. Transcribe each match exactly as written; do not correct names or numbers. A player
+   is [ident, name as written], "" where the sheet has no ident (it is looked up); null
+   is a board nobody sat at. Results from the home side. A blank result with both
+   players present: ask the user. Read digits carefully (1/7, 3/8, 0/6) and say where
+   one was unclear.
+2. check_match_report(report) saves nothing. Show the user its log and every STOP,
+   NOTICE and warn. Home and guest written the wrong way round is fine: the check turns
+   the report around (a NOTE); tell the user.
+3. enter_match_report(completed, confirm=true) only after the check came back clean and
+   the user said yes, with the check's `completed` report. Saved results are public to
+   the whole league.
+
+Result entry needs a Chess-Results login, which the user stores in their own terminal
+(python3 scripts/cli.py login). Never ask for the password in chat. Queries are public.
+"""
+
+mcp = FastMCP('chess-results', instructions=INSTRUCTIONS)
 _session = {}
+
+# Every tool reads chess-results.com; only enter_match_report changes anything there.
+# Hosts such as ChatGPT ask the user before calling a tool that is not read-only.
+READ = ToolAnnotations(readOnlyHint=True, openWorldHint=True)
+SAVE = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True, openWorldHint=True)
 
 
 # ---------------------------------------------------------------- result models
@@ -199,7 +234,7 @@ def _query(fn, *args, **kwargs):
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def status() -> Status:
     """Whether a Chess-Results login is stored (never the password), which club
     settings file is in use, and whether the login works right now."""
@@ -212,7 +247,7 @@ def status() -> Status:
     return info
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def search_players(last_name: str = '', first_name: str = '', ident: str = '', fide_id: str = '',
                    federation: str = '', club: str = '', birth_year: str = '', date_from: str = '',
                    date_to: str = '', limit: int = 50) -> PlayerSearch:
@@ -227,14 +262,14 @@ def search_players(last_name: str = '', first_name: str = '', ident: str = '', f
     return PlayerSearch(**_query(client.search_players, session(), limit=limit, **query))
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def player_card(tnr: int, snr: int) -> PlayerCard:
     """A player's card in one tournament: ident, FIDE id, birth year, ratings
     (national and international), federation, club, and their games there."""
     return PlayerCard(**_query(client.player_card, session(), tnr, snr))
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def search_tournaments(name: str = '', country: str = '', location: str = '', organizer: str = '',
                        director: str = '', tnr: str = '', ended_from: str = '', ended_to: str = '',
                        limit: int = 50) -> TournamentSearch:
@@ -246,7 +281,7 @@ def search_tournaments(name: str = '', country: str = '', location: str = '', or
                                      limit=limit, **query))
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def tournament(tnr: int, art: int | None = None, rd: int | None = None, snr: int | None = None,
                details: bool = False) -> TournamentPage:
     """Any page of a tournament as tables, plus `views`: the page's menu of other pages
@@ -258,7 +293,7 @@ def tournament(tnr: int, art: int | None = None, rd: int | None = None, snr: int
     return TournamentPage(**_query(client.tournament, session(), tnr, art=art, rd=rd, snr=snr, details=details))
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def championship_leagues(year: int, prefix: str = '') -> Leagues:
     """The leagues of an Austrian championship season (Chess-Results' "AUT
     championship" overview), optionally only names starting with `prefix` (e.g.
@@ -276,7 +311,7 @@ def _match(report, save):
     return who, problems, completed
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def check_match_report(report: dict[str, Any]) -> MatchCheck:
     """Check a transcribed team match report against Chess-Results, saving nothing.
 
@@ -295,7 +330,7 @@ def check_match_report(report: dict[str, Any]) -> MatchCheck:
     return MatchCheck(log=log, problems=problems, completed=completed, loggedOnAs=who)
 
 
-@mcp.tool()
+@mcp.tool(annotations=SAVE)
 def enter_match_report(report: dict[str, Any], confirm: bool = False) -> MatchEntry:
     """Check and SAVE a team match report on Chess-Results. Saved results are public
     to the whole league. Only call after check_match_report came back clean and the

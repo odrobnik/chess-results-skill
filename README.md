@@ -105,6 +105,10 @@ The tests run offline. Every club, player and number in them is made up.
 
 ## Changes
 
+**0.2.1** — The MCP server carries the match-report workflow in its instructions, for
+hosts that load it without SKILL.md (ChatGPT, …), and marks every tool as read-only
+except `enter_match_report`, so hosts ask before saving.
+
 **0.2.0** — Query results are consistent data: ISO dates everywhere, the last update
 of a tournament as a timestamp (`updatedAt`, was "19 Hours 24 Min."), numbers as
 integers, full tournament names in player searches (the site cuts them to 30
