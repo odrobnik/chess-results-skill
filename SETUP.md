@@ -16,19 +16,25 @@ python3 scripts/cli.py login
 ```
 
 It asks for your Chess-Results personal number and password (hidden), stores them and
-tries the login. Where they are stored:
+tries the login. The command line and the MCP server then find it by themselves, in
+this order:
 
-- **macOS**: the login keychain, as a generic password with service `chess-results`,
-  written and read by `/usr/bin/security`. That program is on the entry's access list,
-  so reading it never shows an authorization dialog while you are logged in.
-  Passwords saved by Safari live in iCloud Keychain / the Passwords app, which no
-  command-line tool can read — copy yours from there once into `cli.py login`.
-- **Windows / Linux**: the system credential store through `keyring`.
-- **Anywhere**: `CHESS_RESULTS_PNO` and `CHESS_RESULTS_PASSWORD` in the environment
-  override the store (for CI or a server).
+1. **Environment** — `CHESS_RESULTS_PNO` and `CHESS_RESULTS_PASSWORD`.
+2. **System credential store** — where `cli.py login` writes:
+   - **macOS**: the login keychain, generic password with service `chess-results`,
+     written and read by `/usr/bin/security`. That program is on the entry's access
+     list, so it is read without an authorization dialog while you are logged in.
+     Passwords saved by Safari live in iCloud Keychain / the Passwords app, which no
+     command-line tool can read — copy yours from there once into `cli.py login`.
+   - **Windows / Linux desktop**: Credential Manager / Secret Service, through `keyring`.
+3. **A private file** — for machines without a credential store (a headless server, a
+   container): `python3 scripts/cli.py login --file` writes
+   `~/.config/chess-results/credentials.json` with mode 600 (another path:
+   `--file PATH`, and `CHESS_RESULTS_CREDENTIALS=PATH` for reading). A file that others
+   can read is refused.
 
-`python3 scripts/cli.py status` shows whether a login is stored and works (never the
-password); `python3 scripts/cli.py logout` removes it.
+`python3 scripts/cli.py status` shows whether a login is found and where (never the
+password); `python3 scripts/cli.py logout` removes the stored one.
 
 ## Club settings (only for match reports)
 
@@ -78,27 +84,28 @@ Two ways in, both from this folder or `git:github.com/odrobnik/chess-results-ski
   from `.mcp.json` (`${CLAUDE_PLUGIN_ROOT}` is expanded). The tools then appear as
   `chess-results__search_players` and so on.
 
-**The login.** On macOS nothing more is needed: the scripts and the MCP server read
-the Keychain entry from `cli.py login` themselves, as the user OpenClaw runs as.
+**The login.** Use `cli.py login` as above — the Keychain/credential store on a
+desktop, `cli.py login --file` on a headless gateway. Both reach the command line and
+the MCP server alike, with nothing to configure in OpenClaw.
 
-To manage it with OpenClaw's secrets instead (a headless host, another secret
-manager), set the environment variables through the skill entry. The skill declares
-`CHESS_RESULTS_PASSWORD` as its `primaryEnv`, so it can be a SecretRef:
+Through OpenClaw's own settings, a login reaches **only the command line**:
 
 ```json5
 {
   skills: { entries: { "chess-results": {
-    apiKey: { source: "exec", provider: "keychain", id: "chess-results" },  // or env / file
+    apiKey: { source: "exec", provider: "…", id: "chess-results" },  // a SecretRef: env, file, exec
     env: { CHESS_RESULTS_PNO: "your-personal-number" }
   } } }
 }
 ```
 
-An `exec` provider must be a script you own (OpenClaw does not run root-owned
-binaries such as `/usr/bin/security` directly); it can call
-`security find-generic-password -s chess-results -w`. These variables reach commands
-the agent runs on the host — the command line — but not the MCP server, which keeps
-reading the Keychain itself.
+The skill declares `CHESS_RESULTS_PASSWORD` as its `primaryEnv`, so `apiKey` becomes
+that variable for commands the agent runs. MCP servers don't get it: OpenClaw starts
+them with only a few inherited variables, and `plugins.entries.<id>` has no `apiKey`
+or `env` (only `enabled`, `hooks`, `subagent`, `llm`, `config`). For the MCP tools,
+use the credential store or the file. An `exec` SecretRef provider must be a script
+you own; OpenClaw does not run root-owned binaries such as `/usr/bin/security`
+directly.
 
 ## Tests
 

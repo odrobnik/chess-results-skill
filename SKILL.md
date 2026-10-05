@@ -78,6 +78,7 @@ The entry page only offers the round currently open.
 
 ## Credentials
 
-The login lives in the system credential store and is written only by the user, in
-their own terminal (`python3 scripts/cli.py login`). Never ask for the password in
+The login lives in the system credential store — or, on a machine without one, a
+private file (`cli.py login --file`) — and is written only by the user, in their own
+terminal (`python3 scripts/cli.py login`). Never ask for the password in
 chat, never read or print it. Only result entry needs it; all queries are public.

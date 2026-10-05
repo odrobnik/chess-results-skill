@@ -255,6 +255,56 @@ class CredentialTests(unittest.TestCase):
                     os.environ[k] = v
 
 
+class CredentialFileTests(unittest.TestCase):
+    """The file route, with the system store switched off so a real entry is untouched."""
+
+    def setUp(self):
+        import tempfile
+        self.dir = tempfile.TemporaryDirectory()
+        self.path = Path(self.dir.name) / 'credentials.json'
+        self.saved = (credentials._security, credentials._keyring,
+                      {k: os.environ.get(k) for k in ('CHESS_RESULTS_PNO', 'CHESS_RESULTS_PASSWORD',
+                                                      'CHESS_RESULTS_CREDENTIALS')})
+        credentials._security = lambda: None
+        credentials._keyring = lambda: None
+        for k in ('CHESS_RESULTS_PNO', 'CHESS_RESULTS_PASSWORD'):
+            os.environ.pop(k, None)
+        os.environ['CHESS_RESULTS_CREDENTIALS'] = str(self.path)
+
+    def tearDown(self):
+        credentials._security, credentials._keyring, env = self.saved
+        for k, v in env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        self.dir.cleanup()
+
+    def test_a_private_file_is_used_and_written_private(self):
+        credentials.store_file('900999', 'file-only-value')
+        self.assertEqual(oct(self.path.stat().st_mode & 0o777), '0o600')
+        self.assertEqual(credentials.load(), ('900999', 'file-only-value'))
+        info = credentials.status()
+        self.assertTrue(info['source'].startswith('file '))
+        self.assertNotIn('file-only-value', repr(info))
+
+    def test_a_file_others_can_read_is_refused(self):
+        credentials.store_file('900999', 'file-only-value')
+        os.chmod(self.path, 0o644)
+        with self.assertRaises(credentials.CredentialError):
+            credentials.load()
+
+    def test_the_environment_still_wins_over_the_file(self):
+        credentials.store_file('900999', 'file-only-value')
+        os.environ.update(CHESS_RESULTS_PNO='900888', CHESS_RESULTS_PASSWORD='env-value')
+        self.assertEqual(credentials.load(), ('900888', 'env-value'))
+
+    def test_without_any_login_the_hint_says_how(self):
+        with self.assertRaises(credentials.CredentialError) as e:
+            credentials.load()
+        self.assertIn('--file', str(e.exception))
+
+
 class PackagingTests(unittest.TestCase):
     """The same folder is a skill (OpenClaw, ClawHub), a Claude Code plugin and an
     OpenClaw Claude bundle; these keep the pieces in step."""

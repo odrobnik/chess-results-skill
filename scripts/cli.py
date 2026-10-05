@@ -1,6 +1,7 @@
 """The chess-results tools from a terminal.
 
     python3 cli.py login                 # store the Chess-Results login (asks, hidden)
+    python3 cli.py login --file [path]   # in a private file instead (no credential store)
     python3 cli.py logout                # remove it
     python3 cli.py status
 
@@ -37,7 +38,10 @@ def show(data):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest='cmd', required=True)
-    sub.add_parser('login', help='store the Chess-Results login in the system credential store')
+    p = sub.add_parser('login', help='store the Chess-Results login in the system credential store')
+    p.add_argument('--file', nargs='?', const='', default=None, metavar='PATH',
+                   help='write a private credentials file instead (default ~/.config/chess-results/'
+                        'credentials.json), for machines without a credential store')
     sub.add_parser('logout', help='remove the stored login')
     sub.add_parser('status', help='what is configured; tries the login')
     p = sub.add_parser('players', help='search players')
@@ -68,10 +72,15 @@ def main():
     args = ap.parse_args()
 
     if args.cmd == 'login':
-        print(f'Stored in: {credentials.backend() or "nowhere — install keyring, or use environment variables"}')
+        to_file = args.file is not None
+        target = (args.file or credentials.credentials_file()) if to_file else credentials.backend()
+        print(f'Stored in: {target or "nowhere — use --file, install keyring, or use environment variables"}')
         pno = input('Chess-Results personal number: ').strip()
         password = getpass.getpass('Password (not shown): ')
-        where = credentials.store(pno, password)
+        if not pno or not password:
+            print('Both are needed; nothing stored.')
+            return 1
+        where = credentials.store_file(pno, password, args.file or None) if to_file else credentials.store(pno, password)
         s = client.session(load_config())
         try:
             print(f'Saved to the {where}. Chess-Results logs you on as: {client.login(s)}')

@@ -7,11 +7,21 @@ user's own terminal.
 
 Where it is looked for, first hit wins:
 
-1. CHESS_RESULTS_PNO and CHESS_RESULTS_PASSWORD in the environment — for a host or
-   machine without a credential store (CI, a server);
-2. on macOS, the login keychain through Apple's `security` tool;
-3. elsewhere, the system store through the `keyring` package (Windows Credential
-   Manager, Linux Secret Service).
+1. CHESS_RESULTS_PNO and CHESS_RESULTS_PASSWORD in the environment;
+2. on macOS, the login keychain through Apple's `security` tool; elsewhere, the
+   system store through the `keyring` package (Windows Credential Manager, Linux
+   Secret Service);
+3. a credentials file, for machines without a credential store (a headless server,
+   a container): $CHESS_RESULTS_CREDENTIALS, else credentials.json in the host's
+   plugin data folder ($PLUGIN_DATA, $CLAUDE_PLUGIN_DATA) if it gives one, else
+   ~/.config/chess-results/credentials.json. The file must be the user's own and
+   readable by nobody else (mode 600), or it is refused.
+
+The file is the one route that reaches every process the same way — the command
+line and an MCP server, in OpenClaw, Claude Code or Codex — without the host passing
+anything: hosts start MCP servers with only a few inherited variables, and OpenClaw's
+skill settings (skills.entries.*.apiKey/env) reach commands the agent runs, not MCP
+servers.
 
 On macOS the entry is written and read by the same program, /usr/bin/security,
 which is on the entry's access list, so reading it never shows an authorization
@@ -23,16 +33,53 @@ The store holds one generic password under the service "chess-results": the
 account is the Chess-Results personal number, the secret the password. Nothing
 here ever prints the password.
 """
+import json
 import os
 import platform
 import shutil
+import stat
 import subprocess
+from pathlib import Path
 
 SERVICE = 'chess-results'
 
 
 class CredentialError(Exception):
     pass
+
+
+def credentials_file():
+    """Where the credentials file is looked for (it need not exist)."""
+    if os.environ.get('CHESS_RESULTS_CREDENTIALS'):
+        return Path(os.environ['CHESS_RESULTS_CREDENTIALS']).expanduser()
+    for var in ('PLUGIN_DATA', 'CLAUDE_PLUGIN_DATA'):
+        if os.environ.get(var) and (Path(os.environ[var]) / 'credentials.json').exists():
+            return Path(os.environ[var]) / 'credentials.json'
+    return Path.home() / '.config/chess-results/credentials.json'
+
+
+def _from_file():
+    path = credentials_file()
+    if not path.exists():
+        return None
+    info = path.stat()
+    if info.st_uid != os.getuid() or info.st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+        raise CredentialError(f'{path} must be your own and private: chmod 600 {path}')
+    data = json.loads(path.read_text(encoding='utf-8'))
+    if data.get('pno') and data.get('password'):
+        return str(data['pno']), str(data['password'])
+    raise CredentialError(f'{path} needs "pno" and "password".')
+
+
+def store_file(pno, password, path=None):
+    """Write the credentials file (mode 600) — for machines without a credential store."""
+    path = Path(path).expanduser() if path else credentials_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        json.dump({'pno': pno, 'password': password}, f)
+    os.chmod(path, 0o600)
+    return f'file {path}'
 
 
 def _keyring():
@@ -105,9 +152,13 @@ def load():
         password = kr.get_password(SERVICE, pno) if pno else None
         if pno and password:
             return pno, password
+    found = _from_file()
+    if found:
+        return found
     raise CredentialError(
-        'No Chess-Results login stored. Run, in your own terminal: '
-        'python3 <plugin>/server/cli.py login  (or set CHESS_RESULTS_PNO and CHESS_RESULTS_PASSWORD).')
+        'No Chess-Results login stored. Run, in your own terminal: python3 <skill>/scripts/cli.py login '
+        '(add --file on a machine without a credential store), or set CHESS_RESULTS_PNO and '
+        'CHESS_RESULTS_PASSWORD.')
 
 
 def store(pno, password):
@@ -154,12 +205,24 @@ def forget():
             pass
 
 
+def source():
+    """Which route load() would use, for messages."""
+    if os.environ.get('CHESS_RESULTS_PNO') and os.environ.get('CHESS_RESULTS_PASSWORD'):
+        return 'environment'
+    if _security() and _keychain_account():
+        return 'macOS Keychain'
+    kr = None if _security() else _keyring()
+    if kr and kr.get_password(SERVICE, '__account__'):
+        return 'system credential store (keyring)'
+    if credentials_file().exists():
+        return f'file {credentials_file()}'
+    return None
+
+
 def status():
     """What is configured, without revealing the password."""
-    source = 'environment' if os.environ.get('CHESS_RESULTS_PNO') and os.environ.get(
-        'CHESS_RESULTS_PASSWORD') else backend()
     try:
         pno, _ = load()
-        return dict(stored=True, source=source, account=pno)
+        return dict(stored=True, source=source(), account=pno)
     except CredentialError as e:
         return dict(stored=False, source=backend(), hint=str(e))
