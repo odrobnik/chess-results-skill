@@ -558,9 +558,33 @@ def search_players(s, limit=50, **query):
         g['appearances'].append(dict(tournament=row.get('Tournament'), end=row.get('End-Date'),
                                      rank=row.get('Rk.'), rounds=row.get('Rd.'), players=row.get('n'),
                                      tnr=m and m.group(1), snr=m and m.group(2)))
-    players = sorted(groups.values(), key=lambda g: -len(g['appearances']))
-    return dict(query=query, players=players[:limit], playerCount=len(players),
-                truncated=len(players) > limit or len((found or {}).get('rows', [])) >= 250)
+    players = sorted(groups.values(), key=lambda g: -len(g['appearances']))[:limit]
+    full_tournament_names(s, [a for g in players for a in g['appearances']])
+    return dict(query=query, players=players, playerCount=len(groups),
+                truncated=len(groups) > limit or len((found or {}).get('rows', [])) >= 250)
+
+
+SEARCH_NAME_LENGTH = 30   # the player search cuts tournament names to this many characters
+FULL_NAME_LOOKUPS = 25    # at most this many tournament pages per search
+
+
+def full_tournament_names(s, appearances):
+    """Replace tournament names the player search cut short with the full name from the
+    tournament's own page (cached for a week; names don't change). At most
+    FULL_NAME_LOOKUPS distinct tournaments per call; the rest keep the short name and
+    are marked `nameShortened`."""
+    cut = {a['tnr'] for a in appearances
+           if a.get('tnr') and len(a.get('tournament') or '') >= SEARCH_NAME_LENGTH}
+    names = {}
+    for tnr in sorted(cut, reverse=True)[:FULL_NAME_LOOKUPS]:
+        title = title_of(cached_get(s, f'{SEARCH_BASE}tnr{int(tnr)}.aspx?lan=1', 7 * 86400))
+        if title:
+            names[tnr] = ' '.join(title.split())
+    for a in appearances:
+        if a.get('tnr') in names:
+            a['tournament'] = names[a['tnr']]
+        elif a.get('tnr') in cut:
+            a['nameShortened'] = True
 
 
 def player_card(s, tnr, snr):

@@ -54,6 +54,8 @@ class Appearance(BaseModel):
     rank: str | None = None
     rounds: str | None = None
     players: str | None = Field(None, description='Number of participants')
+    nameShortened: bool | None = Field(None, description='The name is cut short as the search printed it '
+                                                         '(too many tournaments to look up); see tournament(tnr)')
     tnr: str | None = Field(None, description='Tournament number, for player_card and tournament')
     snr: str | None = Field(None, description="The player's number in that tournament, for player_card")
 
