@@ -1,0 +1,108 @@
+# chess-results — Setup
+
+## Prerequisites
+
+- **Python 3.11+**
+- Packages: `pip install -r requirements.txt`
+  (`mcp`, `requests`, `beautifulsoup4`, `Pillow`; `keyring` is needed on Linux and
+  Windows for the login store — macOS uses the Keychain directly)
+
+## Login (only for result entry)
+
+Run once, in your own terminal:
+
+```bash
+python3 scripts/cli.py login
+```
+
+It asks for your Chess-Results personal number and password (hidden), stores them and
+tries the login. Where they are stored:
+
+- **macOS**: the login keychain, as a generic password with service `chess-results`,
+  written and read by `/usr/bin/security`. That program is on the entry's access list,
+  so reading it never shows an authorization dialog while you are logged in.
+  Passwords saved by Safari live in iCloud Keychain / the Passwords app, which no
+  command-line tool can read — copy yours from there once into `cli.py login`.
+- **Windows / Linux**: the system credential store through `keyring`.
+- **Anywhere**: `CHESS_RESULTS_PNO` and `CHESS_RESULTS_PASSWORD` in the environment
+  override the store (for CI or a server).
+
+`python3 scripts/cli.py status` shows whether a login is stored and works (never the
+password); `python3 scripts/cli.py logout` removes it.
+
+## Club settings (only for match reports and cards)
+
+Copy `examples/chess-results.example.json` to `chess-results.json` in your project
+folder (or any parent folder, `~/.config/chess-results/chess-results.json`, or a
+path in `CHESS_RESULTS_CONFIG`) and adapt it:
+
+| Key | Meaning |
+|---|---|
+| `club` | the word that marks your teams in Chess-Results team names |
+| `club_name` | your club's full name |
+| `user_agent` | how the client names itself; sent as `Mozilla/5.0 (compatible; …)`, which the result editor requires |
+| `ignore_words` | sponsor or other words in team names that say nothing about a club |
+| `tournaments.championship.prefix` | search every league starting with this on Chess-Results' AUT championship overview (e.g. `Bgld`, `Wien`) |
+| `tournaments.numbers` | or list tournament numbers directly — works for any country |
+| `board_order_tolerance` | rating points within which boards may be swapped (national rating); `null` to skip |
+| `deadline` | online entry closes at this time on the first working day after the match; `null` for none |
+| `card` | card `title`, `footer`, `output` folder (relative to the project), `language` (`de`/`en`) |
+
+The queries work without a settings file.
+
+## Claude Code
+
+This folder is a Claude Code plugin (`.claude-plugin/plugin.json`): it starts the MCP
+server and adds this skill. For development: `claude --plugin-dir /path/to/chess-results`.
+
+## Codex
+
+Add the server to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.chess-results]
+command = "python3"
+args = ["/path/to/chess-results/scripts/server.py"]
+```
+
+The login comes from the same credential-store entry; nothing secret goes into the
+Codex config.
+
+## OpenClaw
+
+Two ways in, both from this folder or `git:github.com/odrobnik/chess-results-skill`:
+
+- **As a skill** — `openclaw skills install ./chess-results` (or ClawHub). The agent
+  uses the command line, `{baseDir}/scripts/cli.py`.
+- **As a plugin** — `openclaw plugins install ./chess-results`. OpenClaw reads this
+  folder as a Claude bundle: it loads `skills/chess-results` and starts the MCP server
+  from `.mcp.json` (`${CLAUDE_PLUGIN_ROOT}` is expanded). The tools then appear as
+  `chess-results__search_players` and so on.
+
+**The login.** On macOS nothing more is needed: the scripts and the MCP server read
+the Keychain entry from `cli.py login` themselves, as the user OpenClaw runs as.
+
+To manage it with OpenClaw's secrets instead (a headless host, another secret
+manager), set the environment variables through the skill entry. The skill declares
+`CHESS_RESULTS_PASSWORD` as its `primaryEnv`, so it can be a SecretRef:
+
+```json5
+{
+  skills: { entries: { "chess-results": {
+    apiKey: { source: "exec", provider: "keychain", id: "chess-results" },  // or env / file
+    env: { CHESS_RESULTS_PNO: "your-personal-number" }
+  } } }
+}
+```
+
+An `exec` provider must be a script you own (OpenClaw does not run root-owned
+binaries such as `/usr/bin/security` directly); it can call
+`security find-generic-password -s chess-results -w`. These variables reach commands
+the agent runs on the host — the command line — but not the MCP server, which keeps
+reading the Keychain itself.
+
+## Tests
+
+```bash
+python3 -m unittest discover -s tests
+```
