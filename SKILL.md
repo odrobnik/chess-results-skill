@@ -1,6 +1,6 @@
 ---
 name: chess-results
-description: Work with Chess-Results (chess-results.com) — look up players (appearances, national idents, FIDE ids, ratings, player cards), find tournaments, read any tournament page (rankings, pairings, round results, team compositions, tables), list a season's Austrian championship leagues, and turn photographed team match reports into entered results — check every player against the clubs' member lists and team rosters on Chess-Results, save through Chess-Results' online result entry without a browser, and draw a square result card per match. Use for questions about chess tournaments, players or team results on Chess-Results, and when the user sends photos of team match reports (Spielberichte).
+description: Work with Chess-Results (chess-results.com) — look up players (appearances, national idents, FIDE ids, ratings, player cards), find tournaments, read any tournament page (rankings, pairings, round results, team compositions, tables), list a season's Austrian championship leagues, and turn photographed team match reports into entered results — check every player against the clubs' member lists and team rosters on Chess-Results, and save them through Chess-Results' online result entry without a browser. Use for questions about chess tournaments, players or team results on Chess-Results, and when the user sends photos of team match reports (Spielberichte).
 homepage: https://github.com/odrobnik/chess-results-skill
 metadata: {"openclaw": {"emoji": "♟️", "homepage": "https://github.com/odrobnik/chess-results-skill", "requires": {"bins": ["python3"]}, "primaryEnv": "CHESS_RESULTS_PASSWORD"}}
 ---
@@ -75,11 +75,6 @@ Pass the `completed` report from the check. Saved results are visible to the who
 league (changeable later; Chess-Results logs who saved them). Unclean matches and
 matches outside the entry window are not saved; the overview is re-read to confirm.
 The entry page only offers the round currently open.
-
-### 4. Card — `draw_match_cards(day)` / `cli.py cards <day>`
-
-A 1080 × 1080 PNG per entered match, from what Chess-Results shows publicly — so make
-it after entering. Players may be children: posting full names is the user's call.
 
 ## Credentials
 

@@ -12,7 +12,6 @@
 
     python3 cli.py check report.json [--complete filled.json]
     python3 cli.py enter report.json     # check, then save the clean matches
-    python3 cli.py cards 2026-10-04 [--team 1 --team 3]
 
 Queries print JSON. Run `login` yourself: it is the one command that handles the
 password, and it never shows it.
@@ -66,10 +65,6 @@ def main():
         p = sub.add_parser(name, help='check a match report' + (', then save it' if name == 'enter' else ''))
         p.add_argument('report')
         p.add_argument('--complete', help='write the report with every ident filled in')
-    p = sub.add_parser('cards', help='draw result cards of our entered matches on a day')
-    p.add_argument('day')
-    p.add_argument('--team', action='append')
-    p.add_argument('--out')
     args = ap.parse_args()
 
     if args.cmd == 'login':
@@ -121,12 +116,6 @@ def main():
                 print(f'\nReport with every ident filled in: {args.complete}')
             print(f'\n{problems} problem(s).' if problems else '\nAll matches clean.')
             return 1 if problems else 0
-        elif args.cmd == 'cards':
-            import card
-            require_club(cfg)
-            paths, notes = card.make_cards(s, cfg, date.fromisoformat(args.day), args.team, args.out)
-            print('\n'.join(paths + notes))
-            return 0 if paths else 1
     except (client.EntryError, client.QueryError, credentials.CredentialError, ValueError) as e:
         print(f'error: {e}', file=sys.stderr)
         return 1

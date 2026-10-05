@@ -4,7 +4,7 @@
 
 - **Python 3.11+**
 - Packages: `pip install -r requirements.txt`
-  (`mcp`, `requests`, `beautifulsoup4`, `Pillow`; `keyring` is needed on Linux and
+  (`requests`, `beautifulsoup4`, and `mcp` for the MCP server; `keyring` is needed on Linux and
   Windows for the login store — macOS uses the Keychain directly)
 
 ## Login (only for result entry)
@@ -30,7 +30,7 @@ tries the login. Where they are stored:
 `python3 scripts/cli.py status` shows whether a login is stored and works (never the
 password); `python3 scripts/cli.py logout` removes it.
 
-## Club settings (only for match reports and cards)
+## Club settings (only for match reports)
 
 Copy `examples/chess-results.example.json` to `chess-results.json` in your project
 folder (or any parent folder, `~/.config/chess-results/chess-results.json`, or a
@@ -46,7 +46,6 @@ path in `CHESS_RESULTS_CONFIG`) and adapt it:
 | `tournaments.numbers` | or list tournament numbers directly — works for any country |
 | `board_order_tolerance` | rating points within which boards may be swapped (national rating); `null` to skip |
 | `deadline` | online entry closes at this time on the first working day after the match; `null` for none |
-| `card` | card `title`, `footer`, `output` folder (relative to the project), `language` (`de`/`en`) |
 
 The queries work without a settings file.
 

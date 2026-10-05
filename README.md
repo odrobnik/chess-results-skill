@@ -9,8 +9,6 @@ Tools for [Chess-Results](https://chess-results.com) for AI agents and the termi
   every player is checked against both clubs' member lists and the teams' rosters on
   Chess-Results, missing idents are looked up, Chess-Results' own check runs, and
   results are saved only after explicit confirmation.
-- **Result cards** — a square PNG per match for social media, drawn from what
-  Chess-Results has on record.
 
 Works as an **MCP server** (Claude Code plugin, Codex, any MCP client), as an
 **OpenClaw / ClawHub skill**, and as a **command line**. Chess-Results has no API;

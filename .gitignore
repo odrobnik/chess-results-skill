@@ -4,4 +4,3 @@ __pycache__/
 .venv/
 # Your own settings and output stay out of the repository
 chess-results.json
-*.png

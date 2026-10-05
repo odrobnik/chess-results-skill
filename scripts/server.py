@@ -11,7 +11,6 @@ import io
 import json
 import sys
 from contextlib import redirect_stdout
-from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -143,11 +142,6 @@ class MatchEntry(BaseModel):
     problems: int = Field(0, description='Number of matches not saved or not confirmed; 0 means all saved')
     loggedOnAs: str | None = None
     error: str | None = None
-
-
-class Cards(BaseModel):
-    cards: list[str] = Field(description='Paths of the PNG files drawn')
-    notes: list[str] = Field(description='Matches skipped, e.g. not entered yet')
 
 
 # ---------------------------------------------------------------- tools
@@ -291,18 +285,6 @@ def enter_match_report(report: dict[str, Any], confirm: bool = False) -> MatchEn
         return MatchEntry(log=log, error=error)
     who, problems, _ = result
     return MatchEntry(log=log, problems=problems, loggedOnAs=who)
-
-
-@mcp.tool()
-def draw_match_cards(day: str, teams: list[str] | None = None, out: str = '') -> Cards:
-    """Draw a 1080×1080 PNG result card for each entered match of our club on `day`
-    (YYYY-MM-DD), from what Chess-Results shows publicly. `teams` limits it to team
-    numbers (["1", "3"]); `out` overrides the output folder."""
-    cfg = load_config()
-    require_club(cfg)
-    import card
-    paths, notes = _query(card.make_cards, session(), cfg, date.fromisoformat(day), teams, out or None)
-    return Cards(cards=paths, notes=notes)
 
 
 if __name__ == '__main__':

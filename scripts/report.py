@@ -1,7 +1,7 @@
 """Match reports as transcribed from the paper Spielbericht: notation, names, config.
 
 Nothing here touches the network. client.py talks to Chess-Results, match.py checks
-and enters reports, card.py draws result cards, server.py and cli.py expose them.
+and enters reports, server.py and cli.py expose them.
 
 A report file holds one or more matches, written exactly as on the sheet:
 
