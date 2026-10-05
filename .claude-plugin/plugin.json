@@ -2,6 +2,10 @@
   "name": "chess-results",
   "version": "0.1.0",
   "description": "Chess-Results for agents: search players and tournaments, read any tournament page, and check and enter team-championship results from the paper match report. The login stays in the system credential store.",
+  "author": {
+    "name": "Oliver Drobnik",
+    "url": "https://github.com/odrobnik"
+  },
   "repository": "https://github.com/odrobnik/chess-results-skill",
   "homepage": "https://github.com/odrobnik/chess-results-skill",
   "license": "MIT",

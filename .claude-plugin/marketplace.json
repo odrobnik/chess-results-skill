@@ -1,0 +1,23 @@
+{
+  "name": "chess-results-skill",
+  "description": "Chess-Results tools for Claude Code: player and tournament queries, and team-championship result entry.",
+  "owner": {
+    "name": "Oliver Drobnik",
+    "url": "https://github.com/odrobnik"
+  },
+  "plugins": [
+    {
+      "name": "chess-results",
+      "source": "./",
+      "description": "Chess-Results for agents: search players and tournaments, read any tournament page, and check and enter team-championship results from the paper match report.",
+      "category": "productivity",
+      "keywords": [
+        "chess",
+        "chess-results",
+        "tournaments",
+        "team championship",
+        "mcp"
+      ]
+    }
+  ]
+}
